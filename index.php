@@ -1,12 +1,12 @@
 <?php
-session_start();
-error_reporting(E_ALL);
-ini_set('display_errors', '1');
-
 require_once 'classes/Transaction.php';
 require_once 'classes/RecurringExpense.php';
 require_once 'classes/Wallet.php';
 require_once 'lib/functions.php';
+
+session_start();
+error_reporting(E_ALL);
+ini_set('display_errors', '1');
 
 if (!isset($_SESSION['wallet'])) {
     $_SESSION['wallet'] = new Wallet();
@@ -18,12 +18,12 @@ if (!isset($_SESSION['wallet'])) {
 $wallet = $_SESSION['wallet'];
 
 $errors = [];
-$successMessage = '';
 $amountInput = '';
 $categoryInput = '';
 $dateInput = '';
 $typeInput = 'standard';
 $frequencyInput = 'Щомісячно';
+$successShow = isset($_GET['success']) ? true : false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $amountInput = trim($_POST['amount'] ?? '');
@@ -57,13 +57,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $newTx = new Transaction(floatval($amountInput), $categoryInput, $dateInput);
         }
 
-
         $wallet->addTransaction($newTx);
-        $_SESSION['wallet'] = $wallet; 
+        $_SESSION['wallet'] = $wallet;
 
-        $successMessage = 'Нову транзакцію успішно додано!';
-        $amountInput = '';
-        $dateInput = '';
+        header('Location: ' . $_SERVER['PHP_SELF'] . '?success=1');
+        exit;
     }
 }
 
@@ -81,21 +79,21 @@ $utilitiesTotal = $wallet->totalByCategory('Комунальні послуги'
 </head>
 <body>
     <div class="container">
-        <h1>Трекер особистих витрат (ООП + Форма)</h1>
+        <h1>Трекер особистих витрат (ООП + Колекція Wallet)</h1>
+
+        <?php if ($successShow): ?>
+            <div class="alert success">Нову транзакцію (об'єкт) успішно додано до гаманця!</div>
+        <?php endif; ?>
 
         <div class="form-card">
             <h2>Додати нову транзакцію</h2>
 
-            <?php if (!empty($successMessage)): ?>
-                <div class="alert success"><?= $successMessage ?></div>
-            <?php endif; ?>
-
             <form id="transactionForm" method="post" action="">
                 <div class="form-group">
-                    <label for="type">Тип транзакції:</label>
+                    <label for="type">Тип витрати (Клас):</label>
                     <select id="type" name="type">
-                        <option value="standard" <?= $typeInput === 'standard' ? 'selected' : '' ?>>Звичайна витрата (Базовий клас)</option>
-                        <option value="recurring" <?= $typeInput === 'recurring' ? 'selected' : '' ?>>Регулярна витрата (Похідний клас)</option>
+                        <option value="standard" <?= $typeInput === 'standard' ? 'selected' : '' ?>>Звичайна витрата (Transaction)</option>
+                        <option value="recurring" <?= $typeInput === 'recurring' ? 'selected' : '' ?>>Регулярна витрата (RecurringExpense)</option>
                     </select>
                 </div>
 
@@ -125,7 +123,7 @@ $utilitiesTotal = $wallet->totalByCategory('Комунальні послуги'
                     <?php endif; ?>
                 </div>
 
-                <div class="form-group" id="frequencyGroup">
+                <div class="form-group" id="frequencyGroup" style="display: none;">
                     <label for="frequency">Регулярність:</label>
                     <input type="text" id="frequency" name="frequency" value="<?= htmlspecialchars($frequencyInput) ?>" placeholder="Наприклад: Щомісячно">
                 </div>
@@ -143,12 +141,12 @@ $utilitiesTotal = $wallet->totalByCategory('Комунальні послуги'
             </form>
         </div>
 
-        <h2>Список транзакцій (Колекція Wallet)</h2>
+        <h2>Список транзакцій</h2>
         <table>
             <thead>
                 <tr>
                     <th>№</th>
-                    <th>Опис транзакції (getInfo)</th>
+                    <th>Опис об'єкта (getInfo)</th>
                     <th>Місяць</th>
                     <th>Статус</th>
                 </tr>
