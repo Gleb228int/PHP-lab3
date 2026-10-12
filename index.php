@@ -1,4 +1,5 @@
 <?php
+session_start();
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
@@ -7,13 +8,14 @@ require_once 'classes/RecurringExpense.php';
 require_once 'classes/Wallet.php';
 require_once 'lib/functions.php';
 
-// Створюємо або відновлюємо стан Wallet (для навчального проєкту збережемо базові об'єкти в сесії або масиві)
-$wallet = new Wallet();
+if (!isset($_SESSION['wallet'])) {
+    $_SESSION['wallet'] = new Wallet();
+    $_SESSION['wallet']->addTransaction(new Transaction(450, 'Продукти', '2026-09-01'));
+    $_SESSION['wallet']->addTransaction(new Transaction(12500, 'Техніка', '2026-09-03'));
+    $_SESSION['wallet']->addTransaction(new RecurringExpense(2400, 'Комунальні послуги', '2026-09-12', 'Щомісячно'));
+}
 
-// Початкові дані
-$wallet->addTransaction(new Transaction(450, 'Продукти', '2026-09-01'));
-$wallet->addTransaction(new Transaction(12500, 'Техніка', '2026-09-03'));
-$wallet->addTransaction(new RecurringExpense(2400, 'Комунальні послуги', '2026-09-12', 'Щомісячно'));
+$wallet = $_SESSION['wallet'];
 
 $errors = [];
 $successMessage = '';
@@ -49,15 +51,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        // Створюємо об'єкт базового чи похідного класу залежно від вибору
         if ($typeInput === 'recurring') {
             $newTx = new RecurringExpense(floatval($amountInput), $categoryInput, $dateInput, $frequencyInput);
         } else {
             $newTx = new Transaction(floatval($amountInput), $categoryInput, $dateInput);
         }
 
+
         $wallet->addTransaction($newTx);
-        $successMessage = 'Нову транзакцію (об\'єкт) успішно додано до гаманця!';
+        $_SESSION['wallet'] = $wallet; 
+
+        $successMessage = 'Нову транзакцію успішно додано!';
         $amountInput = '';
         $dateInput = '';
     }
@@ -79,7 +83,6 @@ $utilitiesTotal = $wallet->totalByCategory('Комунальні послуги'
     <div class="container">
         <h1>Трекер особистих витрат (ООП + Форма)</h1>
 
-        <!-- Форма нової транзакції -->
         <div class="form-card">
             <h2>Додати нову транзакцію</h2>
 
@@ -176,7 +179,6 @@ $utilitiesTotal = $wallet->totalByCategory('Комунальні послуги'
         </div>
     </div>
 
-    <!-- Клієнтський JavaScript (localStorage + валідація) -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const categorySelect = document.getElementById('category');
@@ -185,7 +187,6 @@ $utilitiesTotal = $wallet->totalByCategory('Комунальні послуги'
             const form = document.getElementById('transactionForm');
             const amountInput = document.getElementById('amount');
 
-            // Керування відображенням поля регулярності
             function toggleFrequency() {
                 if (typeSelect.value === 'recurring') {
                     frequencyGroup.style.display = 'block';
@@ -196,7 +197,6 @@ $utilitiesTotal = $wallet->totalByCategory('Комунальні послуги'
             toggleFrequency();
             typeSelect.addEventListener('change', toggleFrequency);
 
-            // localStorage для категорії
             const savedCategory = localStorage.getItem('last_category');
             if (savedCategory && !categorySelect.value) {
                 categorySelect.value = savedCategory;
@@ -208,7 +208,6 @@ $utilitiesTotal = $wallet->totalByCategory('Комунальні послуги'
                 }
             });
 
-            // Клієнтська валідація
             form.addEventListener('submit', (event) => {
                 const amountVal = parseFloat(amountInput.value);
                 if (isNaN(amountVal) || amountVal <= 0) {
