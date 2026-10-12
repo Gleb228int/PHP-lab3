@@ -7,12 +7,61 @@ require_once 'classes/RecurringExpense.php';
 require_once 'classes/Wallet.php';
 require_once 'lib/functions.php';
 
+// Створюємо або відновлюємо стан Wallet (для навчального проєкту збережемо базові об'єкти в сесії або масиві)
 $wallet = new Wallet();
 
+// Початкові дані
 $wallet->addTransaction(new Transaction(450, 'Продукти', '2026-09-01'));
 $wallet->addTransaction(new Transaction(12500, 'Техніка', '2026-09-03'));
 $wallet->addTransaction(new RecurringExpense(2400, 'Комунальні послуги', '2026-09-12', 'Щомісячно'));
-$wallet->addTransaction(new RecurringExpense(500, 'Розваги', '2026-09-15', 'Щотижня'));
+
+$errors = [];
+$successMessage = '';
+$amountInput = '';
+$categoryInput = '';
+$dateInput = '';
+$typeInput = 'standard';
+$frequencyInput = 'Щомісячно';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $amountInput = trim($_POST['amount'] ?? '');
+    $categoryInput = trim($_POST['category'] ?? '');
+    $dateInput = trim($_POST['date'] ?? '');
+    $typeInput = trim($_POST['type'] ?? 'standard');
+    $frequencyInput = trim($_POST['frequency'] ?? 'Щомісячно');
+
+    if ($amountInput === '' || !is_numeric($amountInput) || floatval($amountInput) <= 0) {
+        $errors['amount'] = 'Сума має бути числом більшим за 0.';
+    }
+
+    $allowedCategories = ['Продукти', 'Техніка', 'Транспорт', 'Одяг', 'Розваги', 'Комунальні послуги', 'Інше'];
+    if ($categoryInput === '' || !in_array($categoryInput, $allowedCategories)) {
+        $errors['category'] = 'Будь ласка, оберіть коректну категорію.';
+    }
+
+    if ($dateInput === '') {
+        $errors['date'] = 'Дата обов\'язкова.';
+    } else {
+        $d = DateTime::createFromFormat('Y-m-d', $dateInput);
+        if (!$d || $d->format('Y-m-d') !== $dateInput) {
+            $errors['date'] = 'Введено некоректну дату.';
+        }
+    }
+
+    if (empty($errors)) {
+        // Створюємо об'єкт базового чи похідного класу залежно від вибору
+        if ($typeInput === 'recurring') {
+            $newTx = new RecurringExpense(floatval($amountInput), $categoryInput, $dateInput, $frequencyInput);
+        } else {
+            $newTx = new Transaction(floatval($amountInput), $categoryInput, $dateInput);
+        }
+
+        $wallet->addTransaction($newTx);
+        $successMessage = 'Нову транзакцію (об\'єкт) успішно додано до гаманця!';
+        $amountInput = '';
+        $dateInput = '';
+    }
+}
 
 $transactions = $wallet->getTransactions();
 $totalAmount = $wallet->totalBalance();
@@ -28,14 +77,75 @@ $utilitiesTotal = $wallet->totalByCategory('Комунальні послуги'
 </head>
 <body>
     <div class="container">
-        <h1>Трекер особистих витрат (ООП)</h1>
+        <h1>Трекер особистих витрат (ООП + Форма)</h1>
 
-        <h2>Список транзакцій (Класи та успадкування)</h2>
+        <!-- Форма нової транзакції -->
+        <div class="form-card">
+            <h2>Додати нову транзакцію</h2>
+
+            <?php if (!empty($successMessage)): ?>
+                <div class="alert success"><?= $successMessage ?></div>
+            <?php endif; ?>
+
+            <form id="transactionForm" method="post" action="">
+                <div class="form-group">
+                    <label for="type">Тип транзакції:</label>
+                    <select id="type" name="type">
+                        <option value="standard" <?= $typeInput === 'standard' ? 'selected' : '' ?>>Звичайна витрата (Базовий клас)</option>
+                        <option value="recurring" <?= $typeInput === 'recurring' ? 'selected' : '' ?>>Регулярна витрата (Похідний клас)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="amount">Сума (грн):</label>
+                    <input type="number" id="amount" name="amount" step="0.01" min="0.01" 
+                           value="<?= htmlspecialchars($amountInput) ?>" required>
+                    <?php if (isset($errors['amount'])): ?>
+                        <span class="error"><?= $errors['amount'] ?></span>
+                    <?php endif; ?>
+                </div>
+
+                <div class="form-group">
+                    <label for="category">Категорія:</label>
+                    <select id="category" name="category" required>
+                        <option value="">-- Оберіть категорію --</option>
+                        <option value="Продукти" <?= $categoryInput === 'Продукти' ? 'selected' : '' ?>>Продукти</option>
+                        <option value="Техніка" <?= $categoryInput === 'Техніка' ? 'selected' : '' ?>>Техніка</option>
+                        <option value="Транспорт" <?= $categoryInput === 'Транспорт' ? 'selected' : '' ?>>Транспорт</option>
+                        <option value="Одяг" <?= $categoryInput === 'Одяг' ? 'selected' : '' ?>>Одяг</option>
+                        <option value="Розваги" <?= $categoryInput === 'Розваги' ? 'selected' : '' ?>>Розваги</option>
+                        <option value="Комунальні послуги" <?= $categoryInput === 'Комунальні послуги' ? 'selected' : '' ?>>Комунальні послуги</option>
+                        <option value="Інше" <?= $categoryInput === 'Інше' ? 'selected' : '' ?>>Інше</option>
+                    </select>
+                    <?php if (isset($errors['category'])): ?>
+                        <span class="error"><?= $errors['category'] ?></span>
+                    <?php endif; ?>
+                </div>
+
+                <div class="form-group" id="frequencyGroup">
+                    <label for="frequency">Регулярність:</label>
+                    <input type="text" id="frequency" name="frequency" value="<?= htmlspecialchars($frequencyInput) ?>" placeholder="Наприклад: Щомісячно">
+                </div>
+
+                <div class="form-group">
+                    <label for="date">Дата:</label>
+                    <input type="date" id="date" name="date" 
+                           value="<?= htmlspecialchars($dateInput ?: date('Y-m-d')) ?>" required>
+                    <?php if (isset($errors['date'])): ?>
+                        <span class="error"><?= $errors['date'] ?></span>
+                    <?php endif; ?>
+                </div>
+
+                <button type="submit" class="btn">Додати витрату</button>
+            </form>
+        </div>
+
+        <h2>Список транзакцій (Колекція Wallet)</h2>
         <table>
             <thead>
                 <tr>
                     <th>№</th>
-                    <th>Опис транзакції</th>
+                    <th>Опис транзакції (getInfo)</th>
                     <th>Місяць</th>
                     <th>Статус</th>
                 </tr>
@@ -65,5 +175,49 @@ $utilitiesTotal = $wallet->totalByCategory('Комунальні послуги'
             <h3>Загальна сума витрат: <?= formatMoney($totalAmount) ?></h3>
         </div>
     </div>
+
+    <!-- Клієнтський JavaScript (localStorage + валідація) -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const categorySelect = document.getElementById('category');
+            const typeSelect = document.getElementById('type');
+            const frequencyGroup = document.getElementById('frequencyGroup');
+            const form = document.getElementById('transactionForm');
+            const amountInput = document.getElementById('amount');
+
+            // Керування відображенням поля регулярності
+            function toggleFrequency() {
+                if (typeSelect.value === 'recurring') {
+                    frequencyGroup.style.display = 'block';
+                } else {
+                    frequencyGroup.style.display = 'none';
+                }
+            }
+            toggleFrequency();
+            typeSelect.addEventListener('change', toggleFrequency);
+
+            // localStorage для категорії
+            const savedCategory = localStorage.getItem('last_category');
+            if (savedCategory && !categorySelect.value) {
+                categorySelect.value = savedCategory;
+            }
+
+            categorySelect.addEventListener('change', () => {
+                if (categorySelect.value) {
+                    localStorage.setItem('last_category', categorySelect.value);
+                }
+            });
+
+            // Клієнтська валідація
+            form.addEventListener('submit', (event) => {
+                const amountVal = parseFloat(amountInput.value);
+                if (isNaN(amountVal) || amountVal <= 0) {
+                    alert('Помилка (JS): Сума має бути числом більшим за 0!');
+                    event.preventDefault();
+                    amountInput.focus();
+                }
+            });
+        });
+    </script>
 </body>
 </html>
